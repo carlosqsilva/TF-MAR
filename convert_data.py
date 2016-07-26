@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
-#Documentação em: http://www.gdal.org/gdal_tutorial.html
-#                 http://www.gis.usu.edu/~chrisg/python/2009/lectures/ospy_slides4.pdf
+# Breve introdução sobre a biblioteca GDAL
+# Docs em: http://www.gdal.org/gdal_tutorial.html
+#          http://www.gis.usu.edu/~chrisg/python/2009/lectures/ospy_slides4.pdf
 
 import pandas as pd
 from glob import glob
@@ -80,6 +81,7 @@ def tiff_info(geotifAddr):
 		print('Pixel Size = (',geotransform[1], ',',geotransform[5],')')
 
 def makeUnique(colOne, colTwo):
+    """apenas uma gambiarra"""
     string_values = []
     for one, two in zip(colOne, colTwo):
         string_values.append(str(one)+'_'+str(two))
@@ -94,32 +96,49 @@ if __name__ == "__main__":
     # let test on this file
     tiffname = './LC82230612013208LGN00/LC82230612013208LGN00_B2.TIF'
     tiff_info(tiffname)
-    # automaticaly generate files with lat_dec and long_dec
+    # ler é converte os dados de lat long para decimais
     data_frames = []
     for name in filename_txt:
         _temp = pd.read_csv(name, sep=',', usecols=[0,1,2], names=columns)
         _temp['LAT DEC'] = convert2dec(_temp['LAT'])
         _temp['LONG DEC'] = convert2dec(_temp['LONG'])
         _temp['X1'] = _temp['X1']*(-1)
-        _temp['Unique'] = makeUnique(_temp['LAT DEC'], _temp['LONG DEC'])
         _temp.to_csv(name.split('-')[-1], sep=',', index=False)
         data_frames.append(_temp)
     
+    #agregando todos os arquivos em um
     total = pd.concat(data_frames, ignore_index=True)
-    total = total.groupby(total.Unique).mean()
     total.to_csv('total.csv', sep=',', index=False)
     data_frames = None #release memory
-    
+    print('dados totais: ', len(total))
+    #coletando todos os pixel(x,y) referentes as coordenadas (lat/long)
     latlong = total[['LAT DEC', 'LONG DEC']]
-    pixelpair = latLon2Pixel(tiffname, latlong.copy().values)    
+    pixelpair = latLon2Pixel(tiffname, latlong.copy().values)
     
+    #dataframe temporario
+    temp = pd.DataFrame(pixelpair, columns=['y','x'])
+    #criando nova coluna, para facilitar a indentificação de pontos no mesmo pixel
+    temp['Unique'] = makeUnique(temp.y, temp.x)
+    print('dados unicos: ', len(temp.Unique.unique()))
+    
+    #juntando os dados das lat e long em decimais com as posições dos pixels(x,y)
+    result = pd.concat([total, temp], axis=1)
+    result.to_csv('result1.csv', sep=',', index=False) #salvando os dados totais
+    #agrupando pontos que caem no mesmo pixel e realizando a media dos mesmos
+    #devido ao agrupamento a função automaticamente retira as colunas LAT e LONG
+    #pois as mesmas são do tipo string
+    result = result.groupby(result.Unique).mean()
+    result.to_csv('result2.csv', sep=',', index=False) #salvando os dados unicos
+        
     values = dict()
     for tiff in filename_tif:
         image = io.imread(tiff, plugin='tifffile')
+        print(tiff, '\n', 'shape: ', image.shape)
         pixel_values = []
-        for pixel in pixelpair:
+        for pixel in result[['y','x']].values:
             y, x = pixel
             pixel_values.append(image[x, y])
+        image = None
         colname = tiff.split('_')[-1]
         values[colname] = pixel_values
     
