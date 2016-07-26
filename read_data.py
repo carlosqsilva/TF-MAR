@@ -105,9 +105,10 @@ if __name__ == "__main__":
         _temp.to_csv(name.split('-')[-1], sep=',', index=False)
         data_frames.append(_temp)
     
-    total = pd.concat(data_frames)
-    total.groupby(total.Unique).mean()
+    total = pd.concat(data_frames, ignore_index=True)
+    total = total.groupby(total.Unique).mean()
     total.to_csv('total.csv', sep=',', index=False)
+    data_frames = None #release memory
     
     latlong = total[['LAT DEC', 'LONG DEC']]
     pixelpair = latLon2Pixel(tiffname, latlong.copy().values)    
